@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>랜덤 과학 OX 퀴즈</title>
+    <style>
+        /* CSS 코드 시작 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f8ff;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 30px 40px;
+            border-radius: 15px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+        }
+        p {
+            color: #666;
+            line-height: 1.6;
+        }
+        #startButton {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #startButton:hover {
+            background-color: #0056b3;
+        }
+        .hidden {
+            display: none;
+        }
+        #quiz-area {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        #keyword {
+            color: #007bff;
+            font-weight: bold;
+        }
+        .ox-buttons {
+            margin-top: 20px;
+        }
+        .ox-btn {
+            margin: 0 10px;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 2px solid;
+            border-radius: 8px;
+            background-color: white;
+            transition: all 0.2s;
+        }
+        .ox-btn:nth-child(1) { /* O 버튼 */
+            border-color: #28a745;
+            color: #28a745;
+        }
+        .ox-btn:nth-child(1):hover {
+            background-color: #28a745;
+            color: white;
+        }
+        .ox-btn:nth-child(2) { /* X 버튼 */
+            border-color: #dc3545;
+            color: #dc3545;
+        }
+        .ox-btn:nth-child(2):hover {
+            background-color: #dc3545;
+            color: white;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            min-height: 27px; /* 결과 메시지가 없을 때도 높이 유지 */
+        }
+        /* CSS 코드 끝 */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>랜덤 과학 OX 퀴즈</h1>
+        <p>아래 버튼을 눌러 AI가 만든 과학 퀴즈를 풀어보세요!</p>
+        <button id="startButton">새 퀴즈 가져오기</button>
+        <div id="quiz-area" class="hidden">
+            <h2>주제어: <span id="keyword"></span></h2>
+            <p id="question"></p>
+            <div class="ox-buttons">
+                <button class="ox-btn">O</button>
+                <button class="ox-btn">X</button>
+            </div>
+        </div>
+        <p id="result"></p>
+    </div>
+
+    <script>
+        // JavaScript 코드 시작
+        const startButton = document.getElementById('startButton');
+        const quizArea = document.getElementById('quiz-area');
+        const keywordSpan = document.getElementById('keyword');
+        const questionP = document.getElementById('question');
+        const oxButtons = document.querySelectorAll('.ox-btn');
+        const resultP = document.getElementById('result');
+
+        let currentQuiz = {};
+        let isChecking = false; // 중복 클릭 방지 플래그
+
+        // --- AI API 연동 부분 ---
+        // 중요: 아래 'YOUR_OPENAI_API_KEY'를 실제 키로 변경하세요.
+        const API_KEY = 'YOUR_OPENAI_API_KEY';
+
+        async function getQuizFromAI() {
+            startButton.disabled = true;
+            resultP.style.color = 'black';
+            resultP.textContent = 'AI가 퀴즈를 만들고 있습니다... 잠시만 기다려주세요.';
+
+            try {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-3.5-turbo",
+                        messages: [{
+                            role: "user",
+                            content: "초등학생~중학생 수준의 과학 지식과 관련된 랜덤 주제어를 하나 정하고, 그 주제어에 대한 흥미로운 사실을 바탕으로 OX 퀴즈(문제, 정답 O 또는 X)를 만들어줘. 반드시 JSON 형식으로만 응답해줘. 형식 예시: {\"keyword\": \"광합성\", \"question\": \"식물은 산소를 흡수하고 이산화탄소를 배출하여 광합성을 한다.\", \"answer\": \"X\"}"
+                        }],
+                        temperature: 0.8 // 약간의 창의성을 부여
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API 오류: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const aiResponse = data.choices[0].message.content;
+                
+                // AI 응답이 JSON 형식이 아닐 경우를 대비한 파싱
+                // 가끔 응답 앞뒤에 ```json ... ``` 같은 마크다운이 붙는 경우가 있음
+                const jsonString = aiResponse.match(/{.*}/s)[0];
+                currentQuiz = JSON.parse(jsonString);
+
+                keywordSpan.textContent = currentQuiz.keyword;
+                questionP.textContent = currentQuiz.question;
+                quizArea.classList.remove('hidden');
+                resultP.textContent = '';
+                isChecking = false;
+
+            } catch (error) {
+                console.error('AI 퀴즈 생성 오류:', error);
+                resultP.textContent = '퀴즈 생성에 실패했어요. API 키를 확인하거나 잠시 후 다시 시도해 주세요.';
+                quizArea.classList.add('hidden');
+            } finally {
+                startButton.disabled = false;
+            }
+        }
+
+        function checkAnswer(userAnswer) {
+            if (isChecking) return; // 이미 정답 확인 중이면 실행 안 함
+            isChecking = true;
+
+            if (userAnswer.toUpperCase() === currentQuiz.answer.toUpperCase()) {
+                resultP.textContent = '정답입니다! 🎉';
+                resultP.style.color = '#28a745';
+            } else {
+                resultP.textContent = `아쉬워요! 정답은 '${currentQuiz.answer}'입니다. 🤓`;
+                resultP.style.color = '#dc3545';
+            }
+
+            // 2.5초 후에 다음 퀴즈를 풀 수 있도록 준비
+            setTimeout(() => {
+                quizArea.classList.add('hidden');
+                resultP.textContent = '새 퀴즈를 원하면 버튼을 눌러주세요.';
+                resultP.style.color = 'black';
+                isChecking = false; // 플래그 초기화
+            }, 2500);
+        }
+
+        startButton.addEventListener('click', getQuizFromAI);
+
+        oxButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                checkAnswer(e.target.textContent);
+            });
+        });
+        // JavaScript 코드 끝
+    </script>
+</body>
+</html>
